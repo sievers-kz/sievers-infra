@@ -1,0 +1,16 @@
+# секреты и состояние certbot
+.env
+.env.*
+!.env.example
+letsencrypt/
+*.pem
+!**/ssl-dhparams.pem
+
+# IDE
+.idea/
+.vscode/
+
+# ОС и временное
+.DS_Store
+*.swp
+*.log
