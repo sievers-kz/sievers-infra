@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  nginx-config-test:
+    defaults:
+      run:
+        working-directory: hosts/market
+
+    name: Nginx config test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout codebase
+        uses: actions/checkout@v4
+
+      - name: Generate fake certs
+        run: |
+          mkdir -p /tmp/le/live/market.sievers.kz /tmp/le/live/sievers.kz
+          openssl req -x509 -nodes -newkey rsa:2048 -days 1 -subj "/CN=localhost" \
+          -keyout /tmp/le/live/market.sievers.kz/privkey.pem \
+          -out /tmp/le/live/market.sievers.kz/fullchain.pem
+          cp /tmp/le/live/market.sievers.kz/* /tmp/le/live/sievers.kz
+          cp nginx/snippets/options-ssl-nginx.conf nginx/snippets/ssl-dhparams.pem /tmp/le/
+
+      - name: Check Nginx config
+        run: |
+          docker run --rm \
+            -v "$PWD/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" \
+            -v "$PWD/nginx/conf.d:/etc/nginx/conf.d:ro" \
+            -v /tmp/le:/etc/letsencrypt:ro \
+            nginx:1.28-alpine nginx -t
