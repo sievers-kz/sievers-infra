@@ -42,4 +42,4 @@ jobs:
             docker compose config -q
             docker compose run --rm --no-deps --entrypoint nginx nginx -t
             docker compose up -d
-            docker compose exec -T nginx nginx -s reload
+            docker compose up -d --force-recreate --no-deps nginx
