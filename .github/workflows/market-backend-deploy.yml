@@ -32,26 +32,35 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build .env
-        env:
-          ENV_FILE: ${{ secrets.ENV_FILE }}
-          TAG: ${{ inputs.tag }}
-        run: |
-          umask 077
-          f=products/market/services/backend/.env.deploy
-          printf '%s\n' "$ENV_FILE" | grep -v '^IMAGE_TAG=' > "$f"
-          printf 'IMAGE_TAG=%s\n' "$TAG" >> "$f"
-
       - name: Copy files to VPS
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ vars.DEPLOY_HOST }}
           username: ${{ vars.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          source: "products/market/services/backend/docker-compose.yml,products/market/services/backend/docker-compose.proxy.yml,products/market/services/backend/.env.deploy"
+          source: "products/market/services/backend/docker-compose.yml,products/market/services/backend/docker-compose.proxy.yml"
           target: ${{ vars.DEPLOY_PATH }}
           strip_components: 4
           overwrite: true
+
+      - name: Write .env on VPS
+        env:
+          ENV_FILE: ${{ secrets.ENV_FILE }}
+          TAG: ${{ inputs.tag }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+        run: |
+          install -m 700 -d ~/.ssh
+          install -m 600 /dev/null ~/.ssh/deploy_key
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          {
+            printf '%s\n' "$ENV_FILE" | grep -v '^IMAGE_TAG='
+            printf 'IMAGE_TAG=%s\n' "$TAG"
+          } | ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new \
+              "$DEPLOY_USER@$DEPLOY_HOST" \
+              "umask 077 && cat > '$DEPLOY_PATH/.env.new' && mv '$DEPLOY_PATH/.env.new' '$DEPLOY_PATH/.env'"
 
       - name: Deploy on VPS
         uses: appleboy/ssh-action@v1.0.3
@@ -62,7 +71,6 @@ jobs:
           script_stop: true
           script: |
             cd ${{ vars.DEPLOY_PATH }}
-            mv .env.deploy .env && chmod 600 .env
             export COMPOSE_FILE=docker-compose.yml:docker-compose.proxy.yml
             docker compose config -q
             docker compose pull
