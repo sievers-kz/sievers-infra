@@ -1,0 +1,72 @@
+name: Deploy market backend
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Окружение
+        type: choice
+        options: [staging, production]
+        required: true
+      tag:
+        description: "Тег образа (staging-<sha> или production-<sha>)"
+        type: string
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: market-backend-${{ inputs.environment }}
+    concurrency:
+      group: market-backend-${{ inputs.environment }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Validate tag
+        env:
+          TAG: ${{ inputs.tag }}
+          TARGET: ${{ inputs.environment }}
+        run: |
+          [[ "$TAG" =~ ^${TARGET}-[a-f0-9]{40}$ ]] || { echo "Тег не подходит для $TARGET"; exit 1; }
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build .env
+        env:
+          ENV_FILE: ${{ secrets.ENV_FILE }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          umask 077
+          f=products/market/services/backend/.env.deploy
+          printf '%s\n' "$ENV_FILE" | grep -v '^IMAGE_TAG=' > "$f"
+          printf 'IMAGE_TAG=%s\n' "$TAG" >> "$f"
+
+      - name: Copy files to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ vars.DEPLOY_HOST }}
+          username: ${{ vars.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: "products/market/services/backend/docker-compose.yml,products/market/services/backend/docker-compose.proxy.yml,products/market/services/backend/.env.deploy"
+          target: ${{ vars.DEPLOY_PATH }}
+          strip_components: 4
+          overwrite: true
+
+      - name: Deploy on VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ vars.DEPLOY_HOST }}
+          username: ${{ vars.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script_stop: true
+          script: |
+            cd ${{ vars.DEPLOY_PATH }}
+            mv .env.deploy .env && chmod 600 .env
+            export COMPOSE_FILE=docker-compose.yml:docker-compose.proxy.yml
+            docker compose config -q
+            docker compose pull
+            docker compose up -d
+            docker compose ps
+            APP_PORT=$(grep '^APP_PORT=' .env | cut -d= -f2)
+            curl -fsS -o /dev/null --retry 10 --retry-delay 3 --retry-connrefused "http://127.0.0.1:$APP_PORT/docs"
