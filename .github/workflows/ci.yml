@@ -9,7 +9,7 @@ jobs:
   nginx-config-test:
     defaults:
       run:
-        working-directory: hosts/market
+        working-directory: products/market/edge
 
     name: Nginx config test
     runs-on: ubuntu-latest
