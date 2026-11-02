@@ -1,4 +1,4 @@
-name: Deploy market host
+name: Deploy market edge
 
 on:
   push:
@@ -10,9 +10,9 @@ on:
 jobs:
   deploy-infra:
     runs-on: ubuntu-latest
-    environment: market-production
+    environment: market-edge-production
     concurrency:
-      group: market-production
+      group: market-edge-production
       cancel-in-progress: false
 
     steps:
