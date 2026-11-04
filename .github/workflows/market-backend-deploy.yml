@@ -74,8 +74,6 @@ jobs:
             export COMPOSE_FILE=docker-compose.yml:docker-compose.proxy.yml
             docker compose config -q
             docker compose pull
-            docker compose up -d --remove-orphans
+            docker compose up -d --remove-orphans --wait --wait-timeout 120
             docker compose ps
-            APP_PORT=$(grep '^APP_PORT=' .env | cut -d= -f2)
-            curl -fsS -o /dev/null --retry 20 --retry-delay 3 --retry-connrefused --retry-all-errors "http://127.0.0.1:$APP_PORT/docs"
             docker image prune -af --filter "until=24h"
